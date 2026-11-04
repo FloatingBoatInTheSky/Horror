@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SUBSOLO 04 — Terror Psicológico 3D</title>
+  <meta name="description" content="Jogo de terror psicológico 3D em primeira pessoa para navegador (PC e Mobile). Descubra os segredos do complexo abandonado em 1994.">
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+  <!-- 3D WebGL Canvas Viewport -->
+  <div id="webgl-canvas-container"></div>
+
+  <!-- Old Camcorder / VHS Post-Process Visual Layers -->
+  <div id="vhs-post-overlay" class="vhs-overlay"></div>
+  <div class="scanlines"></div>
+  <div class="flicker-layer"></div>
+
+  <!-- Camera HUD -->
+  <div id="camera-hud" class="hidden">
+    <div class="hud-top-bar">
+      <div class="rec-container">
+        <span class="rec-dot"></span>
+        <span class="rec-text">REC</span>
+      </div>
+      <div id="rec-timestamp">00:14:32</div>
+      <div id="rec-battery">BATTERY 87%</div>
+    </div>
+
+    <div class="crosshair"></div>
+
+    <div class="hud-center-info">
+      <div id="interact-prompt" class="hidden">Interagir [E]</div>
+      <div id="hud-notification" class="hidden"></div>
+    </div>
+
+    <div class="hud-bottom-bar">
+      <div class="hud-cam-id">CAM 01 — SUB-04</div>
+      <div class="hud-objective">
+        <span class="obj-label">OBJETIVO: </span>
+        <span id="hud-objective-text">Explore a ala de recepção e encontre uma lanterna.</span>
+      </div>
+      <div class="hud-tape-spd">SP 24fps</div>
+    </div>
+  </div>
+
+  <!-- Touch Controls Overlay for Mobile / Tablet -->
+  <div id="mobile-controls" class="hidden">
+    <div id="joystick-zone">
+      <div id="joystick-knob"></div>
+    </div>
+    <div id="touch-look-zone"></div>
+    <div class="touch-actions">
+      <button id="btn-touch-interact" class="touch-btn" aria-label="Interagir">E</button>
+      <button id="btn-touch-flashlight" class="touch-btn" aria-label="Lanterna">Luz</button>
+      <button id="btn-touch-inventory" class="touch-btn" aria-label="Inventário">Inv</button>
+      <button id="btn-touch-pause" class="touch-btn" aria-label="Pausa">||</button>
+    </div>
+  </div>
+
+  <!-- Loading Screen -->
+  <div id="loading-screen">
+    <div class="menu-card loading-box">
+      <h2 class="game-title" style="font-size: 1.6rem;">SUBSOLO 04</h2>
+      <p class="game-subtitle">VALENWOOD ARCHIVE RECOVERY</p>
+      
+      <div class="loading-bar-border">
+        <div id="loading-bar-fill"></div>
+      </div>
+      
+      <div class="loading-info">
+        <span id="loading-subtext">CARREGANDO ARQUIVOS DA FITA...</span>
+        <span id="loading-percentage">0%</span>
+      </div>
+
+      <p class="loading-warning">AVISO: NÃO CONFIE NO QUE A GRAVAÇÃO MOSTRA.</p>
+    </div>
+  </div>
+
+  <!-- Main Menu -->
+  <div id="main-menu" class="menu-screen">
+    <div class="menu-card">
+      <h1 class="game-title">SUBSOLO 04</h1>
+      <p class="game-subtitle">EXPERIÊNCIA DE TERROR PSICOLÓGICO 3D</p>
+
+      <div class="btn-group">
+        <button id="btn-new-game" class="menu-btn primary">NOVO JOGO</button>
+        <button id="btn-continue" class="menu-btn">CONTINUAR</button>
+        <button id="btn-settings" class="menu-btn">CONFIGURAÇÕES</button>
+        <button id="btn-controls" class="menu-btn">CONTROLES</button>
+        <button id="btn-credits" class="menu-btn">CRÉDITOS</button>
+      </div>
+
+      <div class="menu-footer">
+        Fita Recuperada: 14/10/1994 | Suporte PC & Mobile
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause Menu -->
+  <div id="pause-menu" class="menu-screen hidden">
+    <div class="menu-card">
+      <h2 class="game-title" style="font-size: 1.8rem;">GRAVAÇÃO PAUSADA</h2>
+      <p class="game-subtitle">FITA PARADA</p>
+
+      <div class="btn-group">
+        <button id="btn-resume" class="menu-btn primary">RETOMAR</button>
+        <button id="btn-pause-inventory" class="menu-btn">INVENTÁRIO</button>
+        <button id="btn-pause-settings" class="menu-btn">CONFIGURAÇÕES</button>
+        <button id="btn-pause-quit" class="menu-btn">MENU PRINCIPAL</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="game-modal hidden">
+    <div class="modal-content">
+      <h3 class="modal-title">CONFIGURAÇÕES DO SISTEMA</h3>
+
+      <div class="setting-row">
+        <label for="setting-quality">Qualidade Gráfica:</label>
+        <select id="setting-quality">
+          <option value="HIGH">ALTA (Sombras & Luzes)</option>
+          <option value="MEDIUM">MÉDIA (Otimizada)</option>
+          <option value="LOW">BAIXA (Dispositivos Fracos)</option>
+        </select>
+      </div>
+
+      <div class="setting-row">
+        <label for="setting-low-perf">Modo de Baixo Desempenho:</label>
+        <input type="checkbox" id="setting-low-perf">
+      </div>
+
+      <div class="setting-row">
+        <label for="setting-master-vol">Volume Geral:</label>
+        <input type="range" id="setting-master-vol" min="0" max="100" value="80">
+      </div>
+
+      <div class="setting-row">
+        <label for="setting-mouse-sens">Sensibilidade de Câmera:</label>
+        <input type="range" id="setting-mouse-sens" min="20" max="250" value="100">
+      </div>
+
+      <div class="setting-row">
+        <label for="setting-rec-effects">Intensidade de Efeitos VHS:</label>
+        <input type="range" id="setting-rec-effects" min="0" max="100" value="100">
+      </div>
+
+      <div class="setting-row">
+        <label for="setting-reduce-motion">Reduzir Balanço da Câmera (Acessibilidade):</label>
+        <input type="checkbox" id="setting-reduce-motion">
+      </div>
+
+      <button class="menu-btn btn-close-modal">FECHAR</button>
+    </div>
+  </div>
+
+  <!-- Controls Modal -->
+  <div id="controls-modal" class="game-modal hidden">
+    <div class="modal-content">
+      <h3 class="modal-title">GUIA DE CONTROLES</h3>
+      <div style="line-height: 1.8; font-size: 0.95rem;">
+        <p><strong>[PC / TECLADO & MOUSE]</strong></p>
+        <p>• <strong>W, A, S, D</strong> / Setas: Movimentação</p>
+        <p>• <strong>Mouse</strong>: Olhar ao redor (Clique para travar mira)</p>
+        <p>• <strong>E</strong>: Interagir com portas, itens e códigos</p>
+        <p>• <strong>F</strong>: Ligar / Desligar Lanterna</p>
+        <p>• <strong>Shift</strong>: Correr</p>
+        <p>• <strong>C / Ctrl</strong>: Agachar</p>
+        <p>• <strong>ESC</strong>: Menu de Pausa</p>
+        <br>
+        <p><strong>[CELULAR / MOBILE]</strong></p>
+        <p>• <strong>Lado Esquerdo</strong>: Joystick virtual de movimento</p>
+        <p>• <strong>Lado Direito</strong>: Arraste para mover a câmera</p>
+        <p>• <strong>Botões virtuais</strong>: [E] Interagir, [Luz] Lanterna, [Inv] Inventário, [||] Pausa</p>
+        <br>
+        <p><strong>[GAMEPAD / XBOX]</strong></p>
+        <p>• <strong>Analógico Esquerdo</strong>: Mover</p>
+        <p>• <strong>Analógico Direito</strong>: Olhar</p>
+        <p>• <strong>Botão A</strong>: Interagir</p>
+        <p>• <strong>Botão X / Y</strong>: Lanterna</p>
+        <p>• <strong>Botão B</strong>: Correr</p>
+      </div>
+      <button class="menu-btn btn-close-modal">FECHAR</button>
+    </div>
+  </div>
+
+  <!-- Credits Modal -->
+  <div id="credits-modal" class="game-modal hidden">
+    <div class="modal-content">
+      <h3 class="modal-title">CRÉDITOS DO PROJETO</h3>
+      <div style="line-height: 1.8; font-size: 0.95rem;">
+        <p><strong>SUBSOLO 04 — TERROR PSICOLÓGICO 3D</strong></p>
+        <p>Criado originalmente para navegador WebGL & GitHub Pages.</p>
+        <p>• Motor 3D: Three.js (WebGL)</p>
+        <p>• Síntese Sonora: Web Audio API procedural (sem dependência de assets pesados)</p>
+        <p>• Texturas: Geração procedural leve em Canvas 2D</p>
+        <p>• Compatibilidade: PC, Mobile (Android/iOS), Console browser</p>
+      </div>
+      <button class="menu-btn btn-close-modal">FECHAR</button>
+    </div>
+  </div>
+
+  <!-- Inventory Modal -->
+  <div id="inventory-modal" class="game-modal hidden">
+    <div class="modal-content">
+      <h3 class="modal-title">INVENTÁRIO DO PERSONAGEM</h3>
+      <div id="inventory-list"></div>
+      <button class="menu-btn btn-close-modal">FECHAR</button>
+    </div>
+  </div>
+
+  <!-- Document Viewer Modal -->
+  <div id="document-modal" class="game-modal hidden">
+    <div class="modal-content doc-card">
+      <h3 id="doc-modal-title" class="doc-title">TÍTULO DO DOCUMENTO</h3>
+      <p id="doc-modal-meta" class="doc-meta">DATA E AUTOR</p>
+      <div id="doc-modal-body" class="doc-body">CONTEÚDO...</div>
+      <button class="menu-btn btn-close-modal" style="margin-top: 24px; color: #111; background-color: #baa88c; border-color: #7a6e5a;">GUARDAR ARQUIVO</button>
+    </div>
+  </div>
+
+  <!-- Keypad Puzzle Modal -->
+  <div id="keypad-modal" class="game-modal hidden">
+    <div class="modal-content keypad-wrapper">
+      <h3 id="keypad-title" class="modal-title" style="text-align: center; margin-bottom: 0;">PAINEL COM CÓDIGO</h3>
+      <div id="keypad-display" class="keypad-display">----</div>
+      <div class="keypad-grid">
+        <button class="keypad-btn" data-key="1">1</button>
+        <button class="keypad-btn" data-key="2">2</button>
+        <button class="keypad-btn" data-key="3">3</button>
+        <button class="keypad-btn" data-key="4">4</button>
+        <button class="keypad-btn" data-key="5">5</button>
+        <button class="keypad-btn" data-key="6">6</button>
+        <button class="keypad-btn" data-key="7">7</button>
+        <button class="keypad-btn" data-key="8">8</button>
+        <button class="keypad-btn" data-key="9">9</button>
+        <button class="keypad-btn" data-key="CLEAR" style="font-size: 0.85rem; color: #ff8888;">CLR</button>
+        <button class="keypad-btn" data-key="0">0</button>
+        <button class="keypad-btn" data-key="ENTER" style="font-size: 0.85rem; color: #88ff88;">ENT</button>
+      </div>
+      <button class="menu-btn btn-close-modal" style="width: 100%; max-width: 280px;">CANCELAR</button>
+    </div>
+  </div>
+
+  <!-- Ending Climax Choice Modal -->
+  <div id="ending-modal" class="game-modal hidden">
+    <div class="modal-content" style="text-align: center;">
+      <h3 class="modal-title" style="color: #ff3333;">O CONFRONTO DO ESPELHO</h3>
+      <p style="margin-bottom: 20px; line-height: 1.6;">
+        Você olha fixamente para a superfície escura do espelho do Arquivo Central. A silhueta do outro lado não é um monstro. É você mesmo, segurando a mesma câmera de 1994.
+      </p>
+      <div class="btn-group">
+        <button id="btn-ending-break" class="menu-btn primary">ESTILHAÇAR O ESPELHO E QUEBRAR A GRAVAÇÃO</button>
+        <button id="btn-ending-accept" class="menu-btn">ACEITAR A GRAVAÇÃO E PERMANECER NO ARQUIVO</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ending Result Screen -->
+  <div id="ending-result-screen" class="menu-screen hidden">
+    <div class="menu-card" style="max-width: 600px;">
+      <h2 id="ending-title" class="game-title" style="font-size: 1.8rem; color: #ffcc22;">FINAL ALCANÇADO</h2>
+      <div id="ending-desc" style="line-height: 1.8; font-size: 1rem; text-align: center; margin: 15px 0;"></div>
+      <button id="btn-restart-game" class="menu-btn primary">JOGAR NOVAMENTE</button>
+    </div>
+  </div>
+
+  <!-- JavaScript Modules in Dependency Order -->
+  <script src="./js/lib/three.min.js"></script>
+  <script src="./data/lore.js"></script>
+  <script src="./js/core/Audio.js"></script>
+  <script src="./js/world/TextureGenerator.js"></script>
+  <script src="./js/game/GameState.js"></script>
+  <script src="./js/core/PlayerController.js"></script>
+  <script src="./js/world/LevelBuilder.js"></script>
+  <script src="./js/core/GameUI.js"></script>
+  <script src="./js/game/HorrorGame.js"></script>
+</body>
+</html>
