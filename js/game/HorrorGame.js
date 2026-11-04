@@ -1,6 +1,11 @@
 /**
  * Main 3D Game Engine (Three.js WebGL)
- * Coordinates render loop, level instantiation, player camera, flashlight spotlight, raycasting interactions, audio cues, and psychological events
+ * Coordinates:
+ * - PSX Low-fi atmosphere & dithering tone
+ * - Player first-person camera, visible arm mesh, stamina
+ * - Entity observation mechanic ("Pretend It's Not There"):
+ *   Looking directly at the entity increases paranoia and triggers heartbeat/glitch.
+ *   Looking away or doing routine tasks calms the player and advances time.
  */
 class HorrorGame {
   constructor() {
@@ -24,43 +29,44 @@ class HorrorGame {
     this.interactables = [];
     this.activeInteractable = null;
 
-    // Raycaster for interact prompt
     this.raycaster = new THREE.Raycaster();
-    this.raycaster.far = 2.8;
+    this.raycaster.far = 2.6;
+
+    this.entityCheckTimer = 0;
 
     this.initThree();
   }
 
   initThree() {
-    this.ui.showLoading(15, 'INICIALIZANDO MOTOR GRÁFICO WEBGL...');
+    this.ui.showLoading(20, 'INICIALIZANDO CASA DE BLACKWOOD PINES...');
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x0c0e10, 0.085);
+    this.scene.fog = new THREE.FogExp2(0x0e1114, 0.095);
 
     this.camera = new THREE.PerspectiveCamera(
-      70,
+      68,
       window.innerWidth / window.innerHeight,
       0.1,
-      40
+      35
     );
 
     this.renderer = new THREE.WebGLRenderer({
       powerPreference: 'high-performance',
-      antialias: false, // Performance optimization for horror grainy look
+      antialias: false,
       stencil: false,
       depth: true
     });
 
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-    this.renderer.setClearColor(0x0c0e10, 1);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+    this.renderer.setClearColor(0x0a0c0e, 1);
 
     this.container.appendChild(this.renderer.domElement);
 
-    this.ui.showLoading(45, 'RECONSTRUINDO SUBSOLO 04...');
+    this.ui.showLoading(50, 'GERANDO MOBÍLIA E TÁBUAS DO PISO...');
 
-    // Flashlight SpotLight attached to camera
-    this.flashlight = new THREE.SpotLight(0xfff5dd, 2.8, 16, Math.PI / 6.5, 0.45, 1.2);
+    // Flashlight SpotLight attached to player view
+    this.flashlight = new THREE.SpotLight(0xfff0cc, 2.6, 14, Math.PI / 6.5, 0.4, 1.3);
     this.flashlightTarget = new THREE.Object3D();
     this.scene.add(this.flashlightTarget);
     this.flashlight.target = this.flashlightTarget;
@@ -69,45 +75,37 @@ class HorrorGame {
 
     // Player Controller
     this.player = new PlayerController(this.camera, document.body, this.gameState, this.audio);
+    this.scene.add(this.camera);
 
-    // Build World
+    // Build House
     this.levelBuilder = new LevelBuilder(this.scene, this.gameState);
-    const worldData = this.levelBuilder.buildComplex();
+    const worldData = this.levelBuilder.buildHouse();
     this.player.setColliders(worldData.colliders);
     this.interactables = worldData.interactables;
 
-    this.ui.showLoading(85, 'CALIBRANDO SENSORES DE ÁUDIO E CÂMERA...');
+    this.ui.showLoading(85, 'SINTETIZANDO FONTES ACÚSTICAS...');
 
     window.addEventListener('resize', () => this.onWindowResize());
-
     this.applyQualitySettings();
 
-    // Finish loading
     setTimeout(() => {
-      this.ui.showLoading(100, 'SISTEMA PRONTO.');
+      this.ui.showLoading(100, 'PRONTO.');
       setTimeout(() => {
         this.ui.hideLoading();
-      }, 500);
+      }, 400);
     }, 400);
 
-    // Start render loop
     requestAnimationFrame((t) => this.renderLoop(t));
   }
 
   startSession() {
     this.audio.startAmbient();
-    this.player.teleport(0, 1.7, 12, 0); // Reception start facing North
+    // Start in Bedroom beside bed
+    this.player.teleport(-1.2, 1.7, 6.2, 0);
     this.updateFlashlightLight();
 
-    // Check if player had completed doors/puzzles from save
-    if (this.gameState.data.puzzles.padlock_block_b) {
-      this.levelBuilder.openDoor('door_block_b');
-    }
-    if (this.gameState.data.puzzles.keypad_archive) {
-      this.levelBuilder.openDoor('door_archive');
-    }
-    if (this.gameState.data.puzzles.fuse_box && this.levelBuilder.fuseBoxStatus) {
-      this.levelBuilder.fuseBoxStatus.material = this.levelBuilder.materials.glowGreen;
+    if (this.gameState.data.curtainsClosed && this.levelBuilder.curtainsMesh) {
+      this.levelBuilder.curtainsMesh.scale.x = 1.0;
     }
   }
 
@@ -116,25 +114,24 @@ class HorrorGame {
     const lowPerf = this.gameState.settings.lowPerformanceMode;
 
     if (q === 'LOW' || lowPerf) {
-      this.renderer.setPixelRatio(0.85);
-      this.camera.far = 22;
-      this.scene.fog.density = 0.12;
+      this.renderer.setPixelRatio(0.75);
+      this.camera.far = 20;
+      this.scene.fog.density = 0.14;
     } else if (q === 'MEDIUM') {
       this.renderer.setPixelRatio(1.0);
-      this.camera.far = 30;
-      this.scene.fog.density = 0.09;
-    } else { // HIGH
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-      this.camera.far = 40;
-      this.scene.fog.density = 0.085;
+      this.camera.far = 28;
+      this.scene.fog.density = 0.11;
+    } else {
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+      this.camera.far = 35;
+      this.scene.fog.density = 0.095;
     }
     this.camera.updateProjectionMatrix();
-    this.ui.updateVhsOverlayIntensity();
   }
 
   toggleFlashlight() {
     if (!this.gameState.data.hasFlashlight) {
-      this.ui.showNotification('Você ainda não possui uma lanterna.');
+      this.ui.showNotification('Você precisa pegar a lanterna na cômoda primeiro.');
       return;
     }
 
@@ -146,6 +143,9 @@ class HorrorGame {
   updateFlashlightLight() {
     const isVisible = this.gameState.data.hasFlashlight && this.gameState.data.flashlightOn;
     this.flashlight.visible = isVisible;
+    if (this.player && this.player.flashlightMesh) {
+      this.player.flashlightMesh.visible = isVisible;
+    }
   }
 
   interact() {
@@ -154,35 +154,16 @@ class HorrorGame {
     }
   }
 
-  turnOnAuxiliaryLighting() {
-    const auxLight = new THREE.PointLight(0xccddaa, 0.7, 16);
-    auxLight.position.set(0, 2.8, -6);
-    this.scene.add(auxLight);
-  }
-
   triggerPsychologicalEvent(eventId) {
-    if (this.gameState.data.eventsTriggered[eventId]) return;
-    this.gameState.data.eventsTriggered[eventId] = true;
-
     switch (eventId) {
-      case 'lights_flicker_block_b':
-        this.audio.playGlitchStatic(0.4);
-        this.ui.showNotification('ELETROMAGNETISMO INSTÁVEL: As luzes do Bloco B oscilaram...');
-        break;
-
-      case 'generator_humming':
-        this.audio.playDistortedRadio();
-        break;
-
-      case 'archive_opened':
-        this.audio.playBreathing();
-        this.ui.showNotification('"Não confie na gravação... você esteve aqui antes."');
+      case 'basement_opened':
+        this.audio.playEntityGlitch();
+        this.ui.showNotification('O ar do porão cheira a terra úmida e feno velho...');
         break;
     }
   }
 
   checkRaycastInteractions() {
-    // Check distance and facing vector from camera
     this.raycaster.setFromCamera({ x: 0, y: 0 }, this.camera);
     let closestItem = null;
     let closestDist = 2.4;
@@ -192,7 +173,6 @@ class HorrorGame {
       const item = this.interactables[i];
       const dist = pPos.distanceTo(item.position);
       if (dist < (item.radius || 2.0)) {
-        // Also check if looking generally in its direction
         const dirToItem = item.position.clone().sub(pPos).normalize();
         const camDir = new THREE.Vector3();
         this.camera.getWorldDirection(camDir);
@@ -212,6 +192,43 @@ class HorrorGame {
     }
   }
 
+  updateEntityObservation(delta) {
+    // Entity appears during later hours (e.g. routine step >= 4)
+    if (!this.levelBuilder.entityMesh) return;
+
+    if (this.gameState.data.routineStep >= 4) {
+      this.levelBuilder.entityMesh.visible = true;
+
+      // Check if player is directly looking at entity
+      const entPos = this.levelBuilder.entityMesh.position;
+      const camPos = this.camera.position;
+      const distToEnt = camPos.distanceTo(entPos);
+
+      const dirToEnt = entPos.clone().sub(camPos).normalize();
+      const camDir = new THREE.Vector3();
+      this.camera.getWorldDirection(camDir);
+      const dot = camDir.dot(dirToEnt);
+
+      if (dot > 0.72 && distToEnt < 12) {
+        // Player is staring directly at the entity!
+        this.gameState.data.paranoia = Math.min(100, this.gameState.data.paranoia + delta * 28);
+        this.audio.playHeartbeat();
+
+        if (this.gameState.data.paranoia >= 95) {
+          this.ui.showNotification('VOCÊ OLHOU POR MUITO TEMPO! ELA ESTÁ SE APROXIMANDO!');
+          this.audio.playEntityGlitch();
+        }
+      } else {
+        // Player is looking away! Paranoia steadily drains (The Core Rule: Pretend It's Not There)
+        this.gameState.data.paranoia = Math.max(10, this.gameState.data.paranoia - delta * 14);
+      }
+
+      this.ui.updateParanoiaBar(this.gameState.data.paranoia / 100);
+    } else {
+      this.levelBuilder.entityMesh.visible = false;
+    }
+  }
+
   onWindowResize() {
     if (!this.camera || !this.renderer) return;
     this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -227,9 +244,8 @@ class HorrorGame {
 
     if (this.ui.isPlaying && !this.ui.isPaused) {
       this.player.update(delta);
-      this.levelBuilder.updateFlickers(delta);
+      this.levelBuilder.update(delta);
 
-      // Keep flashlight aligned with camera view
       if (this.flashlight.visible) {
         this.flashlight.position.copy(this.camera.position);
         const forward = new THREE.Vector3();
@@ -238,6 +254,7 @@ class HorrorGame {
       }
 
       this.checkRaycastInteractions();
+      this.updateEntityObservation(delta);
     }
 
     this.renderer.render(this.scene, this.camera);

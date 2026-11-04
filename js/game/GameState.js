@@ -1,21 +1,20 @@
 /**
  * GameState & LocalStorage Manager
- * Handles objectives, inventory, puzzle states, settings, and multiple endings
+ * Handles routine progression, inventory slots (bottom HUD), paranoia meter, settings, and endings
  */
 class GameState {
   constructor() {
-    this.storageKey = 'valenwood_sublevel04_save_v1';
-    this.settingsKey = 'valenwood_sublevel04_settings_v1';
+    this.storageKey = 'pretend_its_not_there_save_v2';
+    this.settingsKey = 'pretend_its_not_there_settings_v2';
 
     this.defaultSettings = {
-      quality: 'HIGH', // HIGH, MEDIUM, LOW
+      quality: 'HIGH',
       lowPerformanceMode: false,
-      masterVolume: 0.8,
+      masterVolume: 0.85,
       sfxVolume: 0.9,
-      musicVolume: 0.7,
       mouseSensitivity: 1.0,
       cameraBobbing: true,
-      recEffectsIntensity: 1.0, // 0 to 1
+      recEffectsIntensity: 0.85,
       reduceMotion: false
     };
 
@@ -23,28 +22,22 @@ class GameState {
     this.loadSettings();
 
     this.defaultState = {
-      chapter: 0,
-      objective: 'Explore a ala de recepção e encontre a lanterna na mesa.',
-      inventory: [],
+      routineStep: 0,
+      currentHour: '01:00 AM',
+      objective: 'Acenda as luzes ou pegue a lanterna na cômoda do quarto.',
+      inventory: [null, null, null, null, null], // 5 bottom slots
+      selectedSlot: 0,
       discoveredDocs: [],
-      puzzles: {
-        padlock_block_b: false,
-        fuse_box: false,
-        keypad_archive: false
-      },
-      fusesCollected: 0,
-      fusesInserted: 0,
+      curtainsClosed: false,
       hasFlashlight: false,
       flashlightOn: false,
-      flashlightBattery: 100,
-      doors: {
-        door_block_b: false,
-        door_generator: false,
-        door_archive: false,
-        door_exit: false
-      },
-      eventsTriggered: {},
-      sanity: 100, // 0 - 100
+      hasBasementKey: false,
+      hasAtticKey: false,
+      fuseRepaired: false,
+      paranoia: 10, // 0 to 100
+      entityAppeared: false,
+      entityLookDuration: 0,
+      stamina: 100, // 0 to 100
       gameFinished: false,
       chosenEnding: null,
       timestamp: Date.now()
@@ -59,17 +52,13 @@ class GameState {
       if (saved) {
         this.settings = Object.assign({}, this.defaultSettings, JSON.parse(saved));
       }
-    } catch (e) {
-      console.warn('LocalStorage settings load failed:', e);
-    }
+    } catch (e) {}
   }
 
   saveSettings() {
     try {
       localStorage.setItem(this.settingsKey, JSON.stringify(this.settings));
-    } catch (e) {
-      console.warn('LocalStorage settings save failed:', e);
-    }
+    } catch (e) {}
   }
 
   hasSave() {
@@ -87,9 +76,7 @@ class GameState {
         this.data = Object.assign({}, this.defaultState, JSON.parse(saved));
         return true;
       }
-    } catch (e) {
-      console.warn('LocalStorage game load failed:', e);
-    }
+    } catch (e) {}
     return false;
   }
 
@@ -99,7 +86,6 @@ class GameState {
       localStorage.setItem(this.storageKey, JSON.stringify(this.data));
       return true;
     } catch (e) {
-      console.warn('LocalStorage game save failed:', e);
       return false;
     }
   }
@@ -120,32 +106,40 @@ class GameState {
   }
 
   addItem(item) {
-    if (!this.data.inventory.find(i => i.id === item.id)) {
-      this.data.inventory.push(item);
-      this.saveGame();
-      if (window.gameUI) {
-        window.gameUI.updateInventory(this.data.inventory);
-        window.gameUI.showNotification(`Item obtido: ${item.name}`);
+    // Find first empty slot among the 5
+    for (let i = 0; i < 5; i++) {
+      if (!this.data.inventory[i]) {
+        this.data.inventory[i] = item;
+        this.saveGame();
+        if (window.gameUI) {
+          window.gameUI.updateBottomInventory();
+          window.gameUI.showNotification(`Item obtido: ${item.name}`);
+        }
+        return true;
       }
-      return true;
+    }
+    if (window.gameUI) {
+      window.gameUI.showNotification('Inventário cheio!');
     }
     return false;
   }
 
   hasItem(id) {
-    return !!this.data.inventory.find(i => i.id === id);
+    return this.data.inventory.some(it => it && it.id === id);
   }
 
   removeItem(id) {
-    const idx = this.data.inventory.findIndex(i => i.id === id);
-    if (idx !== -1) {
-      const item = this.data.inventory.splice(idx, 1)[0];
-      this.saveGame();
-      if (window.gameUI) {
-        window.gameUI.updateInventory(this.data.inventory);
-        window.gameUI.showNotification(`Item usado: ${item.name}`);
+    for (let i = 0; i < 5; i++) {
+      if (this.data.inventory[i] && this.data.inventory[i].id === id) {
+        const item = this.data.inventory[i];
+        this.data.inventory[i] = null;
+        this.saveGame();
+        if (window.gameUI) {
+          window.gameUI.updateBottomInventory();
+          window.gameUI.showNotification(`Item usado: ${item.name}`);
+        }
+        return true;
       }
-      return true;
     }
     return false;
   }
@@ -157,6 +151,17 @@ class GameState {
       return true;
     }
     return false;
+  }
+
+  advanceRoutine(nextStep) {
+    if (nextStep >= GAME_LORE.routine.length) return;
+    this.data.routineStep = nextStep;
+    const r = GAME_LORE.routine[nextStep];
+    this.data.currentHour = r.hour;
+    this.setObjective(r.task);
+    if (window.gameUI) {
+      window.gameUI.showRoutineNotification(r.hour, r.title);
+    }
   }
 }
 

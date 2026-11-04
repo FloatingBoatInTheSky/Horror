@@ -1,8 +1,11 @@
 /**
- * First-person Controller with Dual Input:
- * - PC: PointerLock, WASD, Shift (Sprint), C (Crouch), F (Flashlight), E (Interact), ESC (Pause)
- * - Mobile: Virtual Joystick (movement), Touch swipe (camera look), on-screen buttons (Interact, Flashlight, Sprint, Pause)
- * - Gamepad: Left stick (move), Right stick (look), A (interact), Y/X (flashlight), B (sprint), Start (pause)
+ * First-person Controller with Visible Player Arms & Hands (holding flashlight)
+ * Features:
+ * - Dynamic head bobbing & natural camera sway
+ * - Stamina bar (Sprint consumes stamina, exhausted panting sound)
+ * - Jump & land physics with SFX
+ * - Dual inputs (PC, Touch Joystick, Gamepad)
+ * - Rigged first-person arm mesh in camera viewport
  */
 class PlayerController {
   constructor(camera, domElement, gameState, audio) {
@@ -11,24 +14,38 @@ class PlayerController {
     this.gameState = gameState;
     this.audio = audio;
 
-    // Spatial Position & Speeds
-    this.position = new THREE.Vector3(0, 1.7, 10);
+    // Spatial Position & Physics
+    this.position = new THREE.Vector3(0, 1.7, 6);
     this.camera.position.copy(this.position);
     this.camera.rotation.order = 'YXZ';
 
     this.pitch = 0;
     this.yaw = 0;
 
-    this.walkSpeed = 3.2;
+    // Speeds
+    this.walkSpeed = 3.0;
     this.runSpeed = 5.2;
-    this.crouchSpeed = 1.8;
+    this.crouchSpeed = 1.6;
 
+    // Jump & Gravity
+    this.velocityY = 0;
+    this.gravity = -18.0;
+    this.jumpForce = 5.6;
+    this.isGrounded = true;
+
+    // Heights
     this.standingHeight = 1.7;
     this.crouchHeight = 1.05;
     this.currentHeight = 1.7;
 
     this.isCrouching = false;
     this.isRunning = false;
+
+    // Stamina
+    this.stamina = 100;
+    this.maxStamina = 100;
+    this.staminaExhausted = false;
+    this.exhaustTimer = 0;
 
     // Movement state
     this.moveForward = false;
@@ -39,24 +56,74 @@ class PlayerController {
     // Collision radius
     this.radius = 0.42;
 
-    // Head bobbing
+    // Head bobbing & camera roll sway
     this.bobTimer = 0;
     this.stepTimer = 0;
+    this.cameraRoll = 0;
 
     // Mobile touch tracking
     this.touchLookId = null;
     this.lastTouchLookX = 0;
     this.lastTouchLookY = 0;
-
     this.joystickVector = { x: 0, y: 0 };
 
     this.isLocked = false;
     this.enabled = true;
-
-    // World collision boxes (AABBs populated by LevelBuilder)
     this.colliders = [];
 
+    // Visible First-Person Arm & Hand Model
+    this.armGroup = null;
+    this.flashlightMesh = null;
+    this.initFirstPersonArms();
+
     this.initEvents();
+  }
+
+  initFirstPersonArms() {
+    this.armGroup = new THREE.Group();
+
+    // Low-poly retro sleeve (dark wool sweater)
+    const sleeveGeo = new THREE.CylinderGeometry(0.065, 0.08, 0.38, 8);
+    const sleeveMat = new THREE.MeshLambertMaterial({ color: 0x22262a });
+    const sleeve = new THREE.Mesh(sleeveGeo, sleeveMat);
+    sleeve.position.set(0, 0, -0.15);
+    sleeve.rotation.x = Math.PI / 2.3;
+
+    // Low-poly forearm / skin hand
+    const handGeo = new THREE.BoxGeometry(0.08, 0.06, 0.14);
+    const skinTex = TextureGenerator.createSkinTexture();
+    const handMat = new THREE.MeshLambertMaterial({ map: skinTex, color: 0xc49b80 });
+    const hand = new THREE.Mesh(handGeo, handMat);
+    hand.position.set(0, -0.04, 0.06);
+
+    // Flashlight in hand
+    const flGroup = new THREE.Group();
+    const flBodyGeo = new THREE.CylinderGeometry(0.024, 0.03, 0.22, 8);
+    const flHeadGeo = new THREE.CylinderGeometry(0.045, 0.03, 0.06, 8);
+    const flMat = new THREE.MeshLambertMaterial({ color: 0x1a1a1c });
+    const flHeadMat = new THREE.MeshLambertMaterial({ color: 0xaa8833 });
+
+    const flBody = new THREE.Mesh(flBodyGeo, flMat);
+    flBody.rotation.x = Math.PI / 2;
+    const flHead = new THREE.Mesh(flHeadGeo, flHeadMat);
+    flHead.rotation.x = Math.PI / 2;
+    flHead.position.z = 0.12;
+
+    flGroup.add(flBody);
+    flGroup.add(flHead);
+    flGroup.position.set(0, -0.02, 0.12);
+    flGroup.rotation.x = -0.1;
+
+    this.armGroup.add(sleeve);
+    this.armGroup.add(hand);
+    this.armGroup.add(flGroup);
+    this.flashlightMesh = flGroup;
+
+    // Position arm in bottom right corner of camera view
+    this.armGroup.position.set(0.24, -0.22, -0.45);
+    this.armGroup.rotation.set(-0.1, -0.2, 0.12);
+
+    this.camera.add(this.armGroup);
   }
 
   setColliders(boxes) {
@@ -64,11 +131,9 @@ class PlayerController {
   }
 
   initEvents() {
-    // Keyboard
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
     window.addEventListener('keyup', (e) => this.onKeyUp(e));
 
-    // Mouse Pointer Lock
     this.domElement.addEventListener('click', () => {
       if (this.enabled && !this.isMobile() && !this.isLocked && !window.gameUI.isAnyModalOpen()) {
         this.domElement.requestPointerLock();
@@ -78,7 +143,6 @@ class PlayerController {
     document.addEventListener('pointerlockchange', () => {
       this.isLocked = document.pointerLockElement === this.domElement;
       if (!this.isLocked && !window.gameUI.isPaused && !window.gameUI.isAnyModalOpen()) {
-        // Paused if user unlocked mouse during game
         if (window.gameUI && window.gameUI.isPlaying) {
           window.gameUI.togglePause(true);
         }
@@ -87,7 +151,6 @@ class PlayerController {
 
     document.addEventListener('mousemove', (e) => this.onMouseMove(e));
 
-    // Touch events for right side (camera look)
     const touchLookZone = document.getElementById('touch-look-zone');
     if (touchLookZone) {
       touchLookZone.addEventListener('touchstart', (e) => this.onTouchLookStart(e), { passive: false });
@@ -121,9 +184,14 @@ class PlayerController {
       case 'ArrowRight':
         this.moveRight = true;
         break;
+      case 'Space':
+        this.jump();
+        break;
       case 'ShiftLeft':
       case 'ShiftRight':
-        this.isRunning = true;
+        if (!this.staminaExhausted && this.stamina > 15) {
+          this.isRunning = true;
+        }
         break;
       case 'KeyC':
       case 'ControlLeft':
@@ -134,6 +202,14 @@ class PlayerController {
         break;
       case 'KeyE':
         if (window.game) window.game.interact();
+        break;
+      case 'Digit1':
+      case 'Digit2':
+      case 'Digit3':
+      case 'Digit4':
+      case 'Digit5':
+        const slotIdx = parseInt(e.key) - 1;
+        if (window.gameUI) window.gameUI.selectInventorySlot(slotIdx);
         break;
       case 'Escape':
         if (window.gameUI && window.gameUI.isPlaying) {
@@ -168,6 +244,14 @@ class PlayerController {
     }
   }
 
+  jump() {
+    if (this.isGrounded && !this.isCrouching) {
+      this.velocityY = this.jumpForce;
+      this.isGrounded = false;
+      if (this.audio) this.audio.playJump();
+    }
+  }
+
   onMouseMove(e) {
     if (!this.enabled || !this.isLocked || window.gameUI.isPaused) return;
 
@@ -175,11 +259,11 @@ class PlayerController {
     this.yaw -= e.movementX * sens;
     this.pitch -= e.movementY * sens;
 
-    // Limit pitch to prevent neck snapping
-    const maxPitch = Math.PI / 2 - 0.05;
+    const maxPitch = Math.PI / 2 - 0.08;
     this.pitch = Math.max(-maxPitch, Math.min(maxPitch, this.pitch));
 
-    this.camera.rotation.set(this.pitch, this.yaw, 0);
+    // Dynamic camera sway roll when turning mouse quickly
+    this.cameraRoll = -e.movementX * 0.0006;
   }
 
   onTouchLookStart(e) {
@@ -211,7 +295,7 @@ class PlayerController {
 
         const maxPitch = Math.PI / 2 - 0.08;
         this.pitch = Math.max(-maxPitch, Math.min(maxPitch, this.pitch));
-        this.camera.rotation.set(this.pitch, this.yaw, 0);
+        this.cameraRoll = -dx * 0.0008;
         e.preventDefault();
         break;
       }
@@ -233,7 +317,6 @@ class PlayerController {
     const gp = gamepads[0];
 
     const deadzone = 0.15;
-    // Left stick: movement
     const lx = Math.abs(gp.axes[0]) > deadzone ? gp.axes[0] : 0;
     const ly = Math.abs(gp.axes[1]) > deadzone ? gp.axes[1] : 0;
     if (Math.abs(lx) > 0 || Math.abs(ly) > 0) {
@@ -241,7 +324,6 @@ class PlayerController {
       this.joystickVector.y = -ly;
     }
 
-    // Right stick: look
     const rx = Math.abs(gp.axes[2]) > deadzone ? gp.axes[2] : 0;
     const ry = Math.abs(gp.axes[3]) > deadzone ? gp.axes[3] : 0;
     if (Math.abs(rx) > 0 || Math.abs(ry) > 0) {
@@ -250,10 +332,8 @@ class PlayerController {
       this.pitch -= ry * sens;
       const maxPitch = Math.PI / 2 - 0.08;
       this.pitch = Math.max(-maxPitch, Math.min(maxPitch, this.pitch));
-      this.camera.rotation.set(this.pitch, this.yaw, 0);
     }
 
-    // Button A (0): Interact
     if (gp.buttons[0] && gp.buttons[0].pressed) {
       if (!this._prevButtonA && window.game) window.game.interact();
       this._prevButtonA = true;
@@ -261,7 +341,6 @@ class PlayerController {
       this._prevButtonA = false;
     }
 
-    // Button X / Y (2 or 3): Flashlight
     if ((gp.buttons[2] && gp.buttons[2].pressed) || (gp.buttons[3] && gp.buttons[3].pressed)) {
       if (!this._prevButtonFlash && window.game) window.game.toggleFlashlight();
       this._prevButtonFlash = true;
@@ -269,7 +348,6 @@ class PlayerController {
       this._prevButtonFlash = false;
     }
 
-    // Button B (1): Sprint
     this.isRunning = gp.buttons[1] && gp.buttons[1].pressed;
   }
 
@@ -282,7 +360,7 @@ class PlayerController {
     const targetHeight = this.isCrouching ? this.crouchHeight : this.standingHeight;
     this.currentHeight += (targetHeight - this.currentHeight) * 10 * delta;
 
-    // Movement direction in local space
+    // Movement direction
     let moveX = 0;
     let moveZ = 0;
 
@@ -291,7 +369,6 @@ class PlayerController {
     if (this.moveLeft) moveX -= 1;
     if (this.moveRight) moveX += 1;
 
-    // Add mobile joystick / gamepad inputs
     if (Math.abs(this.joystickVector.x) > 0.05 || Math.abs(this.joystickVector.y) > 0.05) {
       moveX += this.joystickVector.x;
       moveZ += this.joystickVector.y;
@@ -300,52 +377,100 @@ class PlayerController {
     const inputLength = Math.hypot(moveX, moveZ);
     const isMoving = inputLength > 0.1;
 
+    // Stamina calculation
+    if (isMoving && this.isRunning && !this.isCrouching) {
+      this.stamina = Math.max(0, this.stamina - delta * 24);
+      if (this.stamina <= 0) {
+        this.isRunning = false;
+        this.staminaExhausted = true;
+        this.audio.playExhaustedPant();
+      }
+    } else {
+      // Regenerate stamina
+      this.stamina = Math.min(this.maxStamina, this.stamina + delta * 15);
+      if (this.stamina > 35) {
+        this.staminaExhausted = false;
+      }
+    }
+
+    if (window.gameUI) {
+      window.gameUI.updateStaminaBar(this.stamina / this.maxStamina);
+    }
+
+    // Velocity & Speed
     if (isMoving) {
       const speed = this.isCrouching ? this.crouchSpeed : (this.isRunning ? this.runSpeed : this.walkSpeed);
       const normX = (moveX / Math.max(1, inputLength)) * speed * delta;
       const normZ = (moveZ / Math.max(1, inputLength)) * speed * delta;
 
-      // Rotate local input by camera yaw
       const sin = Math.sin(this.yaw);
       const cos = Math.cos(this.yaw);
 
       const dx = normX * cos - normZ * sin;
       const dz = -normX * sin - normZ * cos;
 
-      // Attempt move with axis-separated collision resolution
       this.moveWithCollision(dx, dz);
 
       // Footstep & head bobbing
-      const bobFreq = this.isRunning ? 14 : (this.isCrouching ? 7 : 10);
+      const bobFreq = this.isRunning ? 13 : (this.isCrouching ? 7 : 9.5);
       this.bobTimer += delta * bobFreq;
 
-      this.stepTimer += delta * (this.isRunning ? 1.6 : 1.0);
-      if (this.stepTimer > 0.48) {
+      this.stepTimer += delta * (this.isRunning ? 1.7 : 1.0);
+      if (this.stepTimer > 0.52) {
         this.stepTimer = 0;
-        if (this.audio) this.audio.playFootstep('concrete', this.isRunning);
+        if (this.audio && this.isGrounded) {
+          this.audio.playFootstep('wood', this.isRunning);
+        }
       }
     } else {
-      this.stepTimer = 0.3;
+      this.stepTimer = 0.35;
+      this.bobTimer += delta * 1.5; // subtle breathing sway while standing
     }
 
-    // Apply head bob
-    const bobAmount = (this.gameState.settings.cameraBobbing && !this.gameState.settings.reduceMotion && isMoving)
-      ? Math.sin(this.bobTimer) * (this.isRunning ? 0.045 : 0.025)
-      : 0;
+    // Jump / Gravity Physics
+    if (!this.isGrounded) {
+      this.velocityY += this.gravity * delta;
+      this.position.y += this.velocityY * delta;
 
-    this.camera.position.x = this.position.x;
+      if (this.position.y <= this.standingHeight) {
+        this.position.y = this.standingHeight;
+        this.velocityY = 0;
+        this.isGrounded = true;
+        if (this.audio) this.audio.playLand();
+      }
+    }
+
+    // Smooth return of camera roll
+    this.cameraRoll *= (1.0 - 8.0 * delta);
+
+    // Apply head bob
+    const bobAmount = (this.gameState.settings.cameraBobbing && !this.gameState.settings.reduceMotion && isMoving && this.isGrounded)
+      ? Math.sin(this.bobTimer) * (this.isRunning ? 0.052 : 0.026)
+      : Math.sin(this.bobTimer * 0.8) * 0.005;
+
+    const swayX = Math.cos(this.bobTimer * 0.5) * (isMoving ? 0.015 : 0.002);
+
+    this.camera.position.x = this.position.x + swayX;
     this.camera.position.y = this.position.y - (this.standingHeight - this.currentHeight) + bobAmount;
     this.camera.position.z = this.position.z;
+
+    this.camera.rotation.set(this.pitch, this.yaw, this.cameraRoll);
+
+    // Animate Visible Arm Sway & Bobbing
+    if (this.armGroup) {
+      const armBobY = -0.22 + Math.sin(this.bobTimer) * (isMoving ? 0.02 : 0.004);
+      const armBobX = 0.24 + Math.cos(this.bobTimer * 0.5) * (isMoving ? 0.015 : 0.003);
+      this.armGroup.position.set(armBobX, armBobY, -0.45);
+      this.armGroup.rotation.z = 0.12 + Math.sin(this.bobTimer * 0.5) * 0.04;
+    }
   }
 
   moveWithCollision(dx, dz) {
-    // Test X move
     const newX = this.position.x + dx;
     if (!this.checkCollision(newX, this.position.z)) {
       this.position.x = newX;
     }
 
-    // Test Z move
     const newZ = this.position.z + dz;
     if (!this.checkCollision(this.position.x, newZ)) {
       this.position.z = newZ;
@@ -362,7 +487,6 @@ class PlayerController {
       const box = this.colliders[i];
       if (box.active === false) continue;
 
-      // 2D overlap check in XZ plane
       if (maxX > box.minX && minX < box.maxX &&
           maxZ > box.minZ && minZ < box.maxZ) {
         return true;
