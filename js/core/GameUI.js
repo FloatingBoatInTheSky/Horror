@@ -1,6 +1,11 @@
 /**
- * Game User Interface & Retro Cam HUD Manager
- * Coordinates menus, settings, inventory, documents, keypad puzzle, endings, touch controls, and VHS camera effects
+ * Game User Interface & Bottom Inventory HUD Manager
+ * Styled after "Pretend It's Not There":
+ * - Retro title screen with stylized VHS/PSX typography
+ * - Bottom screen 5-slot inventory bar
+ * - Dynamic stamina bar
+ * - Paranoia meter & clock indicator (01:00 AM)
+ * - Routine chapter transition prompts
  */
 class GameUI {
   constructor(gameState, audio) {
@@ -12,12 +17,8 @@ class GameUI {
     this.activeKeypadCallback = null;
     this.currentKeypadInput = '';
 
-    this.recSeconds = 872; // Start around 00:14:32
-    this.battery = 87;
-
     this.initElements();
     this.bindEvents();
-    this.startHudTimers();
   }
 
   initElements() {
@@ -27,37 +28,33 @@ class GameUI {
     this.settingsModal = document.getElementById('settings-modal');
     this.controlsModal = document.getElementById('controls-modal');
     this.creditsModal = document.getElementById('credits-modal');
-    this.inventoryModal = document.getElementById('inventory-modal');
     this.documentModal = document.getElementById('document-modal');
     this.keypadModal = document.getElementById('keypad-modal');
     this.endingModal = document.getElementById('ending-modal');
 
-    this.hud = document.getElementById('camera-hud');
-    this.recTimestamp = document.getElementById('rec-timestamp');
-    this.recBattery = document.getElementById('rec-battery');
+    this.hud = document.getElementById('game-hud');
+    this.timeIndicator = document.getElementById('hud-time');
     this.objectiveText = document.getElementById('hud-objective-text');
     this.interactPrompt = document.getElementById('interact-prompt');
     this.notificationBox = document.getElementById('hud-notification');
+    this.staminaFill = document.getElementById('stamina-bar-fill');
+    this.paranoiaFill = document.getElementById('paranoia-bar-fill');
 
+    this.inventoryBar = document.getElementById('bottom-inventory-bar');
     this.mobileControls = document.getElementById('mobile-controls');
-    this.vhsOverlay = document.getElementById('vhs-post-overlay');
   }
 
   bindEvents() {
-    // Main Menu Buttons
     document.getElementById('btn-new-game')?.addEventListener('click', () => this.startNewGame());
     document.getElementById('btn-continue')?.addEventListener('click', () => this.continueGame());
     document.getElementById('btn-settings')?.addEventListener('click', () => this.openModal(this.settingsModal));
     document.getElementById('btn-controls')?.addEventListener('click', () => this.openModal(this.controlsModal));
     document.getElementById('btn-credits')?.addEventListener('click', () => this.openModal(this.creditsModal));
 
-    // Pause Menu Buttons
     document.getElementById('btn-resume')?.addEventListener('click', () => this.togglePause(false));
-    document.getElementById('btn-pause-inventory')?.addEventListener('click', () => this.openInventory());
     document.getElementById('btn-pause-settings')?.addEventListener('click', () => this.openModal(this.settingsModal));
     document.getElementById('btn-pause-quit')?.addEventListener('click', () => this.quitToMainMenu());
 
-    // Modal Close Buttons
     document.querySelectorAll('.btn-close-modal').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const modal = e.target.closest('.game-modal');
@@ -72,14 +69,14 @@ class GameUI {
     document.getElementById('btn-touch-flashlight')?.addEventListener('click', () => {
       if (window.game) window.game.toggleFlashlight();
     });
+    document.getElementById('btn-touch-jump')?.addEventListener('click', () => {
+      if (window.game && window.game.player) window.game.player.jump();
+    });
     document.getElementById('btn-touch-pause')?.addEventListener('click', () => {
       this.togglePause();
     });
-    document.getElementById('btn-touch-inventory')?.addEventListener('click', () => {
-      this.openInventory();
-    });
 
-    // Keypad number buttons
+    // Keypad numbers
     document.querySelectorAll('.keypad-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const key = e.target.getAttribute('data-key');
@@ -87,11 +84,9 @@ class GameUI {
       });
     });
 
-    // Settings inputs
     this.bindSettingsInputs();
-
-    // Virtual Joystick on mobile
     this.initVirtualJoystick();
+    this.initBottomInventoryClicks();
   }
 
   bindSettingsInputs() {
@@ -100,7 +95,6 @@ class GameUI {
     const masterVol = document.getElementById('setting-master-vol');
     const sens = document.getElementById('setting-mouse-sens');
     const reduceMotion = document.getElementById('setting-reduce-motion');
-    const recIntensity = document.getElementById('setting-rec-effects');
 
     if (qSelect) {
       qSelect.value = this.gameState.settings.quality;
@@ -145,43 +139,56 @@ class GameUI {
         this.gameState.saveSettings();
       });
     }
+  }
 
-    if (recIntensity) {
-      recIntensity.value = (this.gameState.settings.recEffectsIntensity || 1.0) * 100;
-      recIntensity.addEventListener('input', (e) => {
-        this.gameState.settings.recEffectsIntensity = parseFloat(e.target.value) / 100;
-        this.gameState.saveSettings();
-        this.updateVhsOverlayIntensity();
+  initBottomInventoryClicks() {
+    const slots = document.querySelectorAll('.inv-slot');
+    slots.forEach((slot, idx) => {
+      slot.addEventListener('click', () => {
+        this.selectInventorySlot(idx);
       });
+    });
+  }
+
+  selectInventorySlot(idx) {
+    this.gameState.data.selectedSlot = idx;
+    const slots = document.querySelectorAll('.inv-slot');
+    slots.forEach((s, i) => {
+      s.classList.toggle('selected', i === idx);
+    });
+
+    const item = this.gameState.data.inventory[idx];
+    if (item) {
+      this.showNotification(`Item selecionado: ${item.name}`);
     }
   }
 
-  updateVhsOverlayIntensity() {
-    const intensity = this.gameState.settings.recEffectsIntensity;
-    if (this.vhsOverlay) {
-      this.vhsOverlay.style.opacity = intensity.toString();
-    }
-  }
-
-  startHudTimers() {
-    setInterval(() => {
-      if (!this.isPlaying || this.isPaused) return;
-      this.recSeconds++;
-      const hrs = Math.floor(this.recSeconds / 3600).toString().padStart(2, '0');
-      const mins = Math.floor((this.recSeconds % 3600) / 60).toString().padStart(2, '0');
-      const secs = (this.recSeconds % 60).toString().padStart(2, '0');
-      if (this.recTimestamp) {
-        this.recTimestamp.textContent = `${hrs}:${mins}:${secs}`;
-      }
-
-      // Very slow battery drain for psychological realism
-      if (this.recSeconds % 45 === 0 && this.battery > 5) {
-        this.battery--;
-        if (this.recBattery) {
-          this.recBattery.textContent = `BATTERY ${this.battery}%`;
+  updateBottomInventory() {
+    for (let i = 0; i < 5; i++) {
+      const slotElem = document.getElementById(`inv-slot-${i}`);
+      const item = this.gameState.data.inventory[i];
+      if (slotElem) {
+        if (item) {
+          slotElem.innerHTML = `<span class="slot-num">${i + 1}</span><span class="slot-text">${item.name}</span>`;
+          slotElem.classList.add('has-item');
+        } else {
+          slotElem.innerHTML = `<span class="slot-num">${i + 1}</span>`;
+          slotElem.classList.remove('has-item');
         }
       }
-    }, 1000);
+    }
+  }
+
+  updateStaminaBar(ratio) {
+    if (this.staminaFill) {
+      this.staminaFill.style.width = `${Math.floor(ratio * 100)}%`;
+    }
+  }
+
+  updateParanoiaBar(ratio) {
+    if (this.paranoiaFill) {
+      this.paranoiaFill.style.width = `${Math.floor(ratio * 100)}%`;
+    }
   }
 
   initVirtualJoystick() {
@@ -251,7 +258,7 @@ class GameUI {
     zone.addEventListener('touchcancel', resetJoystick);
   }
 
-  showLoading(progress = 0, message = 'RECUPERANDO GRAVAÇÃO DO SISTEMA...') {
+  showLoading(progress = 0, message = 'CARREGANDO...') {
     if (this.loadingScreen) {
       this.loadingScreen.classList.remove('hidden');
       const bar = document.getElementById('loading-bar-fill');
@@ -281,8 +288,9 @@ class GameUI {
     if (window.game) {
       window.game.startSession();
     }
+    this.updateBottomInventory();
     this.updateObjective(this.gameState.data.objective);
-    this.showNotification('Gravação iniciada: Subsolo 04 — James Vance');
+    this.showRoutineNotification('01:00 AM', 'A CHEGADA EM SILÊNCIO');
   }
 
   continueGame() {
@@ -302,8 +310,10 @@ class GameUI {
     if (window.game) {
       window.game.startSession();
     }
+    this.updateBottomInventory();
     this.updateObjective(this.gameState.data.objective);
-    this.showNotification('Sessão restaurada da fita magnética');
+    if (this.timeIndicator) this.timeIndicator.textContent = this.gameState.data.currentHour;
+    this.showNotification('Sessão restaurada');
   }
 
   togglePause(forceState = null) {
@@ -356,26 +366,13 @@ class GameUI {
     clearTimeout(this._notifTimeout);
     this._notifTimeout = setTimeout(() => {
       this.notificationBox.classList.add('hidden');
-    }, 3800);
+    }, 4000);
   }
 
-  openInventory() {
-    const list = document.getElementById('inventory-list');
-    if (!list) return;
-    list.innerHTML = '';
-
-    if (this.gameState.data.inventory.length === 0) {
-      list.innerHTML = '<p class="empty-inv">Nenhum item coletado ainda.</p>';
-    } else {
-      this.gameState.data.inventory.forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'inventory-item-card';
-        div.innerHTML = `<h4>${item.name}</h4><p>${item.desc || ''}</p>`;
-        list.appendChild(div);
-      });
-    }
-
-    this.openModal(this.inventoryModal);
+  showRoutineNotification(hour, title) {
+    if (this.timeIndicator) this.timeIndicator.textContent = hour;
+    this.audio.playDissonantPianoChord();
+    this.showNotification(`[${hour}] ${title}`);
   }
 
   showDocumentModal(docId) {
@@ -393,7 +390,7 @@ class GameUI {
   showKeypadModal(options) {
     this.activeKeypadCallback = options;
     this.currentKeypadInput = '';
-    document.getElementById('keypad-title').textContent = options.title || 'PAINEL ELETRÔNICO';
+    document.getElementById('keypad-title').textContent = options.title || 'DIGITE O CÓDIGO';
     document.getElementById('keypad-display').textContent = '----';
     this.openModal(this.keypadModal);
   }
@@ -405,32 +402,30 @@ class GameUI {
     if (key === 'CLEAR') {
       this.currentKeypadInput = '';
       display.textContent = '----';
-      this.audio.playKeypadBeep(false);
       return;
     }
 
     if (key === 'ENTER') {
       if (!this.activeKeypadCallback) return;
       if (this.currentKeypadInput === this.activeKeypadCallback.correctCode) {
-        display.textContent = 'ACESSO CONCEDIDO';
+        display.textContent = 'DESTRAVADO';
         display.classList.add('granted');
-        this.audio.playKeypadBeep(true);
+        this.audio.playPickup();
         setTimeout(() => {
           display.classList.remove('granted');
           this.closeModal(this.keypadModal);
           if (this.activeKeypadCallback.onSuccess) {
             this.activeKeypadCallback.onSuccess();
           }
-        }, 900);
+        }, 800);
       } else {
-        display.textContent = 'NEGADO';
+        display.textContent = 'ERRADO';
         display.classList.add('denied');
-        this.audio.playKeypadBeep(false);
         setTimeout(() => {
           display.classList.remove('denied');
           this.currentKeypadInput = '';
           display.textContent = '----';
-        }, 800);
+        }, 700);
       }
       return;
     }
@@ -438,25 +433,23 @@ class GameUI {
     if (this.currentKeypadInput.length < 4) {
       this.currentKeypadInput += key;
       display.textContent = this.currentKeypadInput.padEnd(4, '-');
-      this.audio.playKeypadBeep(true);
     }
   }
 
   showEndingChoiceModal() {
-    this.audio.playJumpscareStinger();
     this.openModal(this.endingModal);
 
-    const btnBreak = document.getElementById('btn-ending-break');
-    const btnAccept = document.getElementById('btn-ending-accept');
+    const btnRun = document.getElementById('btn-ending-run');
+    const btnPretend = document.getElementById('btn-ending-pretend');
 
-    btnBreak.onclick = () => {
+    btnRun.onclick = () => {
       this.closeModal(this.endingModal);
-      this.triggerEnding('BREAK_LOOP');
+      this.triggerEnding('RUN_AWAY');
     };
 
-    btnAccept.onclick = () => {
+    btnPretend.onclick = () => {
       this.closeModal(this.endingModal);
-      this.triggerEnding('ACCEPT_RECORDING');
+      this.triggerEnding('PRETEND_NOT_THERE');
     };
   }
 
@@ -469,16 +462,17 @@ class GameUI {
     const title = document.getElementById('ending-title');
     const desc = document.getElementById('ending-desc');
 
-    if (endingType === 'BREAK_LOOP') {
-      title.textContent = 'FINAL VERDADEIRO: O DESPERTAR';
-      desc.innerHTML = `Você estilhaçou a lente da câmera e desligou a fonte de alimentação do Subsolo 04.<br><br>
-A gravação que você assistia parou de rodar. Pela primeira vez em trinta anos, as luzes de emergência do mundo exterior acenderam.<br><br>
-O ciclo de James Vance foi finalmente encerrado.`;
+    if (endingType === 'PRETEND_NOT_THERE') {
+      title.textContent = 'FINAL VERDADEIRO: O VAZIO';
+      desc.innerHTML = `Você abaixou a cabeça, virou as costas para a porta e arrumou a colcha da cama com calma.<br><br>
+A respiração no corredor foi diminuindo lentamente, como gelo derretendo no escuro.<br><br>
+Às 06:00 AM, o alarme do relógio tocou e a luz do sol de inverno invadiu a janela.<br><br>
+Você sobreviveu porque não deu a ela o que ela mais queria: o seu olhar.`;
     } else {
-      title.textContent = 'FINAL PSICOLÓGICO: A FITA ETERNA';
-      desc.innerHTML = `Você inseriu a fita magnética no arquivo perpétuo e sentou-se na cadeira de recepção.<br><br>
-O timestamp da câmera voltou para 00:00:00.<br><br>
-Passos desconhecidos ecoam no corredor norte... Um novo James Vance acaba de entrar pela porta de entrada.`;
+      title.textContent = 'FINAL RUIM: O RECONHECIMENTO';
+      desc.innerHTML = `Você gritou e correu em direção à porta da frente.<br><br>
+Ao olhar diretamente para onde ela estava... você deu forma, ossos e peso àquilo que não deveria existir.<br><br>
+Ninguém nunca mais encontrou Mark Linwood.`;
     }
 
     resultBox.classList.remove('hidden');
