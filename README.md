@@ -1,48 +1,19 @@
-# FINJA QUE NÃO ESTÁ LÁ (Pretend It's Not There)
+# A CASA QUE ESCUTA
 
-Experiência retro em primeira pessoa em 3D inspirada no aterrorizante minimalismo de *Pretend It's Not There*. Feito em JavaScript puro com Three.js e Web Audio API para navegador (PC, Celular e Console), compatível diretamente com GitHub Pages.
+Jogo curto de terror psicológico 3D original para navegador, em português. Sem backend, conta ou rede; Three.js incluído localmente. Abra `index.html` por um servidor estático (por exemplo `python3 -m http.server 8000`) ou publique a raiz da branch no GitHub Pages. Abrir via `file://` não é suportado por módulos ES.
 
----
+**História:** Lia retorna à casa do pai para recolher seu gravador. A irmã Maia avisa para não ouvir a fita. A casa vem ensaiando vozes da família há décadas; o que existe por trás da estante talvez seja uma lembrança, talvez uma testemunha. Explore fotografias, bilhetes, mensagens e gravações para descobrir o que ela quer.
 
-## 🕯️ A Lore de Blackwood Pines (Outubro de 1998)
-Mark Linwood viaja para a casa isolada de sua falecida avó Eleanor após encontrar cartas perturbadoras. 
-A casa é antiga, com tábuas de madeira que rangem a cada passo e um relógio de pêndulo ecoando na escuridão. Conforme as horas avançam (01:00 AM até 06:00 AM), coisas começam a se mover e uma presença alta e sem rosto surge nos corredores.
+**Controles:** WASD para andar, mouse para olhar (clique para capturar), E para interagir, Shift para correr, F para lanterna, Q para inventário, T para telefone, Esc para pausa. No celular, joystick à esquerda, arraste à direita e botões de ação. A tela de configurações inclui qualidade, volume, sensibilidade e opções de conforto.
 
-**A Regra da Sobrevivência:**
-A entidade se alimenta do seu olhar. Se você encará-la, o medidor de paranoia dispara e ela se aproxima. Se você virar as costas, focar em suas tarefas da rotina e **fingir que ela não está lá**, ela desaparece.
+**Finais:** sair pela entrada, investigar a passagem escondida ou descobrir as três pistas e olhar no espelho antes de examinar a fita. O progresso e as configurações são armazenados localmente no navegador.
 
----
+Código do jogo: `game/`; apresentação: `styles/`; biblioteca: `game/vendor/three.core.js` e `three.module.js` (Three.js 0.187.0, licença MIT).
 
-## 🕹️ Controles
+## O que aconteceu antes
 
-### PC (Teclado e Mouse)
-- **W, A, S, D**: Movimentação
-- **Mouse**: Câmera (clique na tela para travar mira)
-- **Espaço**: Pular (com física e som de impacto)
-- **Shift**: Correr (consome a barra de fôlego/stamina)
-- **E**: Interagir / Pegar itens / Abrir portas e cortinas
-- **F**: Ligar / Desligar Lanterna
-- **Teclas 1 a 5**: Selecionar slots do inventário inferior
-- **ESC**: Menu de pausa
+Na ficcional rua Ashfield, nos arredores de uma cidade americana não nomeada, Elias arquivava gravações de vozes de moradores que desapareceram. Em 1978, registrou pela primeira vez uma voz que não tinha dono. Em 1986, desenhou uma nova divisão na planta da casa; a família insiste que ela nunca existiu. Em 1994, parou de gravar. Lia cresceu ali, mas só se lembra de ter dormido no quarto da frente. Sua irmã Maia nunca entra no estúdio.
 
-### Celular / Mobile
-- **Joystick Virtual (Esquerda)**: Movimentação em 360°
-- **Arraste de Toque (Direita)**: Controle de câmera
-- **Botões na Tela**: [E] Interagir, [Luz] Lanterna, [Pulo] Pular, [||] Pausa
-- **Inventário Inferior**: Toque direto nos 5 slots na barra inferior
+A história começa um dia antes: Lia acorda, prepara café, organiza fichas no arquivo municipal e volta à casa do pai após o expediente. Quando desperta novamente, o relógio marca a mesma hora. O jogador encontra as peças da história no telefone, na fotografia, no bilhete, no gravador e em um cofre. Nem toda lembrança registrada pertence a quem a escuta.
 
----
-
-## ⚙️ Novas Funcionalidades e Melhorias
-- **Visual Inspirado em "Pretend It's Not There"**: Estética retro estilo PSX com dithering suave, texturas de papel de parede antigo, carpete desbotado, tábuas de madeira e iluminação opressiva.
-- **Braços e Mãos em Primeira Pessoa**: Braço com blusa de lã e mão segurando a lanterna modelados e renderizados na visão da câmera com balanço natural.
-- **Física e Sons Extras**:
-  - Movimentação com balanço de câmera (camera roll e head bobbing suave);
-  - Pulo com som de esforço e impacto ao aterrissar;
-  - Barra de fôlego (stamina) que se esgota na corrida, acompanhada de respiração ofegante;
-  - Passos com rangidos procedurais de tábuas de madeira;
-  - Pêndulo de relógio distante marcando os segundos;
-  - Batidas sinistras na porta dos fundos e ranger de cortinas pesadas.
-- **Inventário na Parte Inferior da Tela**: 5 slots horizontais integrados diretamente no HUD inferior.
-- **Menu Inicial Redesenhado**: Título customizado com visual limpo e cinematográfico, sem clichês.
-- **Mecânica Central de Paranoia**: Observar a entidade aumenta o medo; virar o olhar e cumprir a rotina reduz a paranoia e permite sobreviver.
+O cofre usa uma data visível nas caixas do estúdio. O final mais difícil exige as pistas da fotografia, do bilhete, do gravador, do cofre e uma observação opcional do espelho.
